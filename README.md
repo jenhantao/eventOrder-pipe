@@ -9,5 +9,6 @@ Use github.
 
 Examples
 ---------------
+Run the pipe using this command.
 bash run.sh <path to peak files> <overlap distance> <output directory>
 
