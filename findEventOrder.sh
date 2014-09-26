@@ -51,7 +51,31 @@ then
 fi
 
 
-declare -A factorNameMapping # dictionary for creating factor name mapping
+
+# if factor nameMapping doesn't exist, create it
+if [ ! -f $outputDir/factorNameMapping.tsv ]
+then
+	declare -A factorNameMapping # dictionary for creating factor name mapping
+	touch $outputDir/factorNameMapping.tsv
+
+	# iterate through input directory to get file names
+	for dir in $inputDir/*/
+	do
+		for path in $dir/*_peaks.tsv
+		do
+			basePath=$(basename $path)
+			basePath=${basePath%_peaks.tsv}
+			factorNameMapping["$basePath"]=$basePath
+		done
+	done
+
+	# write factor name mapping file
+	for key in "${!factorNameMapping[@]}"
+	do
+		echo -e "$key\t${factorNameMapping[$key]}" >> $outputDir/factorNameMapping.tsv
+	done
+fi
+
 
 for dir in $inputDir/*/
 do
@@ -80,22 +104,35 @@ do
 
 	# merge peaks using Homer
 	echo "calculating initial merged regions"
+	# call merge peaks
+	command="mergePeaks -d given "
+	for path in $outDir/*_ext.tsv
+	do
+		command+=" $path"
+	done
+	echo $command
+	$command > $outDir/merged_ext.tsv
 
-	# create group summary files
+	# shrink peak boundaries by overlap distance
+	echo "python shrinkPeaks.py $outDir/merged_ext.tsv $outDir/merged.tsv $mergeDistance"
+	python ~/code/ap1_pipe/shrinkPeaks.py $outDir/merged_ext.tsv $outDir/merged.tsv $mergeDistance
 
+	# remove extended files
+	rm $outDir/*ext.tsv
+
+	echo "computing stats for overlapping groups"
+	python ~/code/ap1_pipe/calcGroupStats.py $outDir/merged.tsv > $outDir/group_stats.tsv
+
+	# create human readable file
+	command="python /data/home/jenhan/code/ap1_pipe/makeSummaryFile.py $outDir/merged.tsv $outDir/group_stats.tsv $outputDir/factorNameMapping.tsv"
+	for path in $dir/*_peaks.tsv
+	do
+		[ -f "${path}" ] || continue
+		command+=" "$path
+	done
+	echo $command
+	$command > $outDir/group_summary.tsv
 done
-
-# if factor nameMapping doesn't exist, create it
-if [ ! -f $outputDir/factorNameMapping.tsv ]
-then
-	counter=1
-	touch $outputDir/factorNameMapping.tsv
-fi
-for key in "${!factorNameMapping[@]}"
-do
-	echo -e "$key\t${factorNameMapping[$key]}" >> $outputDir/factorNameMapping.tsv
-done
-
 
 # create transition matrices
 
